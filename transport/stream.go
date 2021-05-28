@@ -21,7 +21,7 @@ const (
 )
 
 // Stream is a data stream.
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#name-streams
+// https://www.rfc-editor.org/rfc/rfc9000#section-2
 type Stream struct {
 	recv recvStream
 	send sendStream
@@ -527,7 +527,7 @@ func (s *streamMap) get(id uint64) *Stream {
 // create adds and returns new stream or error if it exceeds limits.
 // Only streams with a stream ID less than (max_stream * 4 + initial_stream_id_for_type)
 // can be opened.
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#name-controlling-concurrency
+// https://www.rfc-editor.org/rfc/rfc9000#section-4.6
 func (s *streamMap) create(id uint64, isClient bool) (*Stream, error) {
 	local := isStreamLocal(id, isClient)
 	bidi := isStreamBidi(id)
@@ -637,7 +637,7 @@ func (s *streamMap) checkClosed(fn func(streamId uint64)) {
 	}
 }
 
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#stream-id
+// https://www.rfc-editor.org/rfc/rfc9000#section-2.1
 // Bits | Stream           | Type
 // 0b00 | Client-Initiated | Bidirectional
 // 0b01 | Server-Initiated | Bidirectional

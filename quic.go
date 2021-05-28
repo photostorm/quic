@@ -29,6 +29,7 @@ package quic
 
 import (
 	"crypto/rand"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -40,7 +41,7 @@ import (
 
 const (
 	maxDatagramSize = transport.MaxIPv6PacketSize
-	cidLength       = transport.MaxCIDLength
+	cidLength       = 16 // or use transport.MaxCIDLength
 	bufferSize      = 1500
 )
 
@@ -76,6 +77,12 @@ type Handler interface {
 type noopHandler struct{}
 
 func (s noopHandler) Serve(*Conn, []transport.Event) {}
+
+// ConnectionState records details about the connection.
+type ConnectionState struct {
+	TLS tls.ConnectionState
+	// TODO: More info
+}
 
 // Conn is a QUIC connection presenting a peer connected to this client or server.
 // Conn is not safe for concurrent use.
@@ -119,6 +126,13 @@ func newRemoteConn(addr net.Addr, scid []byte, conn *transport.Conn, isClient bo
 		c.nextStreamIDUni++
 	}
 	return c
+}
+
+// ConnectionState returns details about the connection.
+func (s *Conn) ConnectionState() ConnectionState {
+	return ConnectionState{
+		TLS: s.conn.HandshakeState(),
+	}
 }
 
 // StreamWrite adds data to the stream buffer for sending.
@@ -607,7 +621,7 @@ func (s *localConn) pollConnDelay(c *Conn) {
 	// TODO: check whether we only need to send back ACK, then we can delay it.
 	timer := time.NewTimer(2 * time.Millisecond) // FIXME: timer granularity
 	defer timer.Stop()
-	for i := 16; i > 0; i-- {
+	for i := 8; i > 0; i-- {
 		select {
 		case <-timer.C:
 			return
