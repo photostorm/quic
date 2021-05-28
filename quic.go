@@ -40,7 +40,7 @@ import (
 
 const (
 	maxDatagramSize = transport.MaxIPv6PacketSize
-	cidLength       = transport.MaxCIDLength
+	cidLength       = 16 // or use transport.MaxCIDLength
 	bufferSize      = 1500
 )
 
@@ -607,7 +607,7 @@ func (s *localConn) pollConnDelay(c *Conn) {
 	// TODO: check whether we only need to send back ACK, then we can delay it.
 	timer := time.NewTimer(2 * time.Millisecond) // FIXME: timer granularity
 	defer timer.Stop()
-	for i := 16; i > 0; i-- {
+	for i := 8; i > 0; i-- {
 		select {
 		case <-timer.C:
 			return

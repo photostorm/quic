@@ -59,4 +59,4 @@ flask run -h 0.0.0.0
 
 ## QVis
 
-https://qvis.edm.uhasselt.be/
+https://qvis.quictools.info/

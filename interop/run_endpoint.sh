@@ -31,7 +31,7 @@ case "$TESTCASE" in
 esac
 
 run_client() {
-    CLIENT_PARAMS="$CLIENT_PARAMS -insecure -root $DLDIR -version 0xff00001d -v 3"
+    CLIENT_PARAMS="$CLIENT_PARAMS -insecure -root $DLDIR -v 3"
     case "$TESTCASE" in
     multiconnect)
         if [ "$MULTIPROCESS" = 1 ]; then

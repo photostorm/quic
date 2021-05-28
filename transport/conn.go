@@ -106,11 +106,11 @@ func newConn(config *Config, scid, odcid []byte, isClient bool) (*Conn, error) {
 	s.recovery.init()
 	s.flow.init(s.localParams.InitialMaxData, 0)
 	if len(scid) > 0 {
-		s.scid = append(s.scid[:0], scid...)
+		s.scid = copyBytes(scid)
 	}
 	s.localParams.InitialSourceCID = s.scid // SCID is fixed so can use its reference
 	if len(odcid) > 0 {
-		s.odcid = append(s.odcid[:0], odcid...)
+		s.odcid = copyBytes(odcid)
 		s.localParams.OriginalDestinationCID = s.odcid
 		s.localParams.RetrySourceCID = s.scid
 		s.didRetry = true // So odcid will not be set again
@@ -206,7 +206,7 @@ func (s *Conn) recv(b []byte, now time.Time) (int, error) {
 	}
 }
 
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#version-negotiation
+// https://www.rfc-editor.org/rfc/rfc9000.html#section-6
 func (s *Conn) recvPacketVersionNegotiation(b []byte, p *packet, now time.Time) (int, error) {
 	// VN packet can only be sent by server
 	if !s.isClient || s.didVersionNegotiation || s.state != StateAttempted {
@@ -244,7 +244,7 @@ func (s *Conn) recvPacketVersionNegotiation(b []byte, p *packet, now time.Time) 
 	return p.headerLen + n, nil
 }
 
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#validate-handshake
+// https://www.rfc-editor.org/rfc/rfc9000.html#section-8.1
 func (s *Conn) recvPacketRetry(b []byte, p *packet, now time.Time) (int, error) {
 	// Retry packet can only be sent by server
 	// Packet's SCID must not be equal to the client's DCID.
@@ -267,11 +267,11 @@ func (s *Conn) recvPacketRetry(b []byte, p *packet, now time.Time) (int, error) 
 		return 0, newError(InvalidToken, "")
 	}
 	s.didRetry = true
-	s.token = append(s.token[:0], p.token...)
+	s.token = copyBytes(p.token)
 	// Update CIDs and crypto: dcid => odcid, header.scid => dcid
-	s.odcid = append(s.odcid[:0], s.dcid...)
-	s.dcid = append(s.dcid[:0], p.header.scid...)
-	s.rscid = s.dcid // DCID is now fixed
+	s.odcid = copyBytes(s.dcid)
+	s.dcid = copyBytes(p.header.scid)
+	s.rscid = copyBytes(p.header.scid)
 	s.deriveInitialKeyMaterial(s.dcid)
 	// Reset connection state to send another initial packet
 	s.gotPeerCID = false
@@ -302,18 +302,18 @@ func (s *Conn) recvPacketInitial(b []byte, p *packet, now time.Time) (int, error
 	if !s.gotPeerCID {
 		if s.isClient {
 			if len(s.odcid) == 0 {
-				s.odcid = append(s.odcid[:0], s.dcid...)
+				s.odcid = copyBytes(s.dcid)
 			}
 		} else {
 			if !s.didRetry {
-				s.odcid = append(s.odcid[:0], p.header.dcid...)
+				s.odcid = copyBytes(p.header.dcid)
 				s.localParams.OriginalDestinationCID = s.odcid
 				s.handshake.setTransportParams(&s.localParams)
 			}
 		}
 		// Replace the randomly generated destination connection ID with
 		// the one supplied by the server.
-		s.dcid = append(s.dcid[:0], p.header.scid...)
+		s.dcid = copyBytes(p.header.scid)
 		s.gotPeerCID = true
 	}
 	return s.recvPacket(b, p, packetSpaceInitial, now)
@@ -366,7 +366,7 @@ func (s *Conn) recvPacket(b []byte, p *packet, space packetSpace, now time.Time)
 	// Process acked frames
 	s.processAckedPackets(space)
 
-	// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#name-abandoning-initial-packets
+	// https://www.rfc-editor.org/rfc/rfc9000.html#section-17.2.2.1
 	// A server stops sending and processing Initial packets when it receives its first Handshake packet.
 	if space == packetSpaceHandshake {
 		if !s.isClient && pnSpace.largestRecvPacketTime.IsZero() {
@@ -387,7 +387,7 @@ func (s *Conn) recvPacket(b []byte, p *packet, space packetSpace, now time.Time)
 	return p.packetSize, nil
 }
 
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#frames
+// https://www.rfc-editor.org/rfc/rfc9000.html#section-12.4
 // recvFrames sets ackElicited if a received frame is an ack eliciting.
 func (s *Conn) recvFrames(b []byte, pktType packetType, space packetSpace, now time.Time) error {
 	// To avoid sending an ACK in response to an ACK-only packet, we need
@@ -889,7 +889,7 @@ func (s *Conn) setPeerParams(params *Parameters, now time.Time) {
 	s.logParametersSet(params, now)
 }
 
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#name-authenticating-connection-i
+// https://www.rfc-editor.org/rfc/rfc9000.html#section-7.3
 //
 // Client                                                  Server
 // Initial: DCID=S1, SCID=C1 ->
@@ -955,7 +955,7 @@ func (s *Conn) Read(b []byte) (int, error) {
 		return 0, err
 	}
 	// Coalesce packets when possible.
-	// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#packet-coalesce
+	// https://www.rfc-editor.org/rfc/rfc9000.html#section-12.2
 	if space < packetSpaceApplication && s.state < StateDraining {
 		avail := minInt(s.maxPacketSize(), len(b))
 		if avail-n >= 96 { // Enough for a handshake packet
@@ -1061,7 +1061,7 @@ func (s *Conn) send(b []byte, space packetSpace, now time.Time) (int, error) {
 	s.onPacketSent(op, space)
 	// TODO: Log real payload length without crypto overhead
 	s.logPacketSent(&p, op.frames, now)
-	// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#name-abandoning-initial-packets
+	// https://www.rfc-editor.org/rfc/rfc9000.html#section-17.2.2.1
 	// A client stops both sending and processing Initial packets when it sends its first Handshake packet.
 	if p.packetNumber == 0 {
 		if s.isClient {
@@ -1411,7 +1411,7 @@ func (s *Conn) setIdleTimer(now time.Time) {
 }
 
 // Close sets the connection to closing state.
-// https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#draining
+// https://www.rfc-editor.org/rfc/rfc9000.html#section-10.2.2
 func (s *Conn) Close(app bool, errCode uint64, reason string) {
 	if s.closeFrame != nil || s.state >= StateDraining {
 		// Closing or draining or already closed
@@ -1793,4 +1793,10 @@ func (s *Conn) logConnectionState(old, new ConnectionState, now time.Time) {
 		logConnectionState(&e, old, new)
 		s.logEventFn(e)
 	}
+}
+
+func copyBytes(src []byte) []byte {
+	dst := make([]byte, len(src))
+	copy(dst, src)
+	return dst
 }
