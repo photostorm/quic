@@ -448,18 +448,21 @@ func (s *Conn) cmdDatagramRead() {
 // If any error occurs or all data consumed, it sends result to the Stream caller.
 func (s *Conn) eventStreamWritable(streamID uint64) {
 	ss := s.streams[streamID]
-	if ss == nil || !ss.isWriting() {
+	if ss == nil {
 		return
 	}
-	st, err := s.conn.Stream(streamID)
-	if err != nil {
-		ss.sendWriteWait(err)
-		return
-	}
-	done, err := ss.recvWriteData(st)
-	if done || err != nil {
-		ss.sendWriteWait(err)
-		return
+	if ss.isWriting() {
+		st, err := s.conn.Stream(streamID)
+		if err != nil {
+			ss.sendWriteResult(err)
+			return
+		}
+		done, err := ss.recvWriteData(st)
+		if done || err != nil {
+			ss.sendWriteResult(err)
+			return
+		}
+		ss.sendWriteResult(errWait)
 	}
 }
 
@@ -467,18 +470,21 @@ func (s *Conn) eventStreamWritable(streamID uint64) {
 // It reads stream data and sends result to the Stream caller that is waiting for read result.
 func (s *Conn) eventStreamReadable(streamID uint64) {
 	ss := s.streams[streamID]
-	if ss == nil || !ss.isReading() {
+	if ss == nil {
 		return
 	}
-	st, err := s.conn.Stream(streamID)
-	if err != nil {
-		ss.sendReadWait(err)
-		return
-	}
-	done, err := ss.recvReadData(st)
-	if done || err != nil {
-		ss.sendReadWait(err)
-		return
+	if ss.isReading() {
+		st, err := s.conn.Stream(streamID)
+		if err != nil {
+			ss.sendReadResult(err)
+			return
+		}
+		done, err := ss.recvReadData(st)
+		if done || err != nil {
+			ss.sendReadResult(err)
+			return
+		}
+		ss.sendReadResult(errWait)
 	}
 }
 
@@ -493,13 +499,16 @@ func (s *Conn) eventStreamClosed(streamID uint64) {
 // eventDatagramReadable handles connection event EventDatagramReadable.
 // It reads data and sends result to the Datagram caller that is waiting for read result.
 func (s *Conn) eventDatagramReadable() {
-	if s.datagram == nil || !s.datagram.isReading() {
+	if s.datagram == nil {
 		return
 	}
-	done, err := s.datagram.recvReadData(s.conn.Datagram())
-	if done || err != nil {
-		s.datagram.sendReadWait(err)
-		return
+	if s.datagram.isReading() {
+		done, err := s.datagram.recvReadData(s.conn.Datagram())
+		if done || err != nil {
+			s.datagram.sendReadResult(err)
+			return
+		}
+		s.datagram.sendReadResult(errWait)
 	}
 }
 

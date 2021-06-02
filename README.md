@@ -104,7 +104,7 @@ client.Close()
 
 Applications get connection events in the handler to control QUIC connections:
 
-```
+```go
 func (handler) Serve(conn *quic.Conn, events []transport.Event) {
 	for _, e := range events {
 		switch e.Type {

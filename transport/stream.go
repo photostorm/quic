@@ -227,6 +227,11 @@ func (s *Stream) Close() error {
 	return nil
 }
 
+// String returns state of the stream.
+func (s *Stream) String() string {
+	return fmt.Sprintf("recv(%s) send(%s)", &s.recv, &s.send)
+}
+
 // recvStream is buffer for receiving data.
 type recvStream struct {
 	buf rangeBufferList // Chunks of received data, ordered by offset
@@ -417,7 +422,7 @@ func (s *sendStream) ack(offset, length uint64) {
 
 // complete returns true if all data in the stream has been sent and acknowledged.
 func (s *sendStream) complete() bool {
-	return s.fin && s.offset >= s.length && s.acked.equals(0, s.length)
+	return s.fin && s.finSent && s.offset >= s.length && s.acked.equals(0, s.length)
 }
 
 // stop indicates peer no longer reads the data that this stream sends.
